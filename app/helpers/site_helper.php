@@ -1,7 +1,7 @@
 <?php
 
 // Munkireport version (last number is number of commits)
-$GLOBALS['version'] = '2.0.4.500';
+$GLOBALS['version'] = '2.0.7.674';
 
 // Return version without commit count
 function get_version()
@@ -26,8 +26,36 @@ function custom_error($msg='')
 }
 
 //===============================================
+// Alerts
+//===============================================s
+
+$GLOBALS['alerts'] = array();
+
+/**
+ * Add Alert
+ *
+ * @param string alert message
+ * @param string type (danger, warning, success, info)
+ **/
+function alert($msg, $type="info")
+{
+	$GLOBALS['alerts'][$type][] = $msg;
+}
+
+/**
+ * Add error message
+ *
+ * @param string message
+ **/
+function error($msg)
+{
+	alert($msg, 'danger');
+}
+
+//===============================================
 // Database
 //===============================================
+
 function getdbh()
 {
 	if ( ! isset($GLOBALS['dbh']))
@@ -82,6 +110,7 @@ function __autoload( $classname )
 //===============================================
 // Language getter, lazy loading
 //===============================================
+
 function lang($str)
 {
 	static $lang = '';
@@ -104,6 +133,30 @@ function url($url='', $fullurl = FALSE)
   $s = $fullurl ? conf('webhost') : '';
   $s .= conf('subdirectory').($url && INDEX_PAGE ? INDEX_PAGE.'/' : INDEX_PAGE) . ltrim($url, '/');
   return $s;
+}
+
+/**
+ * Return a secure url
+ *
+ * @param string url
+ * @return string secure url
+ * @author 
+ **/
+function secure_url($url = '')
+{
+	$parse_url = parse_url(url($url, TRUE));
+	$parse_url['scheme'] = 'https';
+
+	return 
+		 ((isset($parse_url['scheme'])) ? $parse_url['scheme'] . '://' : '')
+		.((isset($parse_url['user'])) ? $parse_url['user'] 
+		.((isset($parse_url['pass'])) ? ':' . $parse_url['pass'] : '') .'@' : '')
+		.((isset($parse_url['host'])) ? $parse_url['host'] : '')
+		.((isset($parse_url['port'])) ? ':' . $parse_url['port'] : '')
+		.((isset($parse_url['path'])) ? $parse_url['path'] : '')
+		.((isset($parse_url['query'])) ? '?' . $parse_url['query'] : '')
+		.((isset($parse_url['fragment'])) ? '#' . $parse_url['fragment'] : '')
+        ;
 }
 
 function redirect($uri = '', $method = 'location', $http_response_code = 302)

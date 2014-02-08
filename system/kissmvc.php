@@ -14,11 +14,18 @@ class Engine extends KISS_Engine
 
     }
 
-	function request_not_found( $msg='' ) 
+	function request_not_found( $msg='', $status_code = 404 ) 
 	{
-		header( "HTTP/1.0 404 Not Found" );
-				
-		die( '<html><head><title>404 Not Found</title></head><body><h1>Not Found</h1><p>'.$msg.'</p><p>The requested URL was not found on this server.</p><p>Please go <a href="javascript: history.back( 1 )">back</a> and try again.</p><hr /><p>Powered By: <a href="http://kissmvc.com">KISSMVC</a></p></body></html>' );
+		$data = array('status_code' => $status_code, 'msg' => '');
+
+		// Don't show a detailed message when not in debug mode
+		conf('debug') && $data['msg'] = $msg;
+			
+		$obj = new View();
+
+		$obj->view('error/client_error', $data);
+
+		exit;
 	}
 
 	function get_uri_string()
@@ -44,7 +51,15 @@ class Model extends KISS_Model
     protected $rt = array(); // Array holding types
     protected $idx = array(); // Array holding indexes
 
-	function save() {
+	// Schema version, increment in child model when creating a db migration
+    protected $schema_version = 0;
+
+    // Errors
+    protected $errors = '';
+
+
+	function save()
+	{
         // one function to either create or update!
         if ($this->rs[$this->pkname] == '')
         {
@@ -59,14 +74,43 @@ class Model extends KISS_Model
     }
 
     /**
+     * Get schema version
+     *
+     * @return integer schema version number
+     **/
+    function get_version()
+    {
+    	return $this->schema_version;
+    }
+
+    /**
+     * Accessor for tablename
+     *
+     * @return string table name
+     **/
+    function get_table_name()
+    {
+    	return $this->tablename;
+    }
+
+    /**
      * Get PDO driver name
      *
      * @return string driver
-     * @author AvB
      **/
     function get_driver()
     {
     	return $this->getdbh()->getAttribute(PDO::ATTR_DRIVER_NAME);
+    }
+
+    /**
+     * Get errors
+     *
+     * @return string errors
+     **/
+    function get_errors()
+    {
+    	return $this->errors;
     }
 
 	// ------------------------------------------------------------------------
@@ -80,17 +124,34 @@ class Model extends KISS_Model
 	 **/
 	function query($sql, $bindings=array())
 	{
-		$dbh=$this->getdbh();
 		if ( is_scalar( $bindings ) )
 			$bindings=$bindings ? array( $bindings ) : array();
-		$stmt = $dbh->prepare( $sql );
-		$stmt->execute( $bindings );
+		$stmt = $this->prepare( $sql );
+		$this->execute( $stmt, $bindings );
 		$arr=array();
 		while ( $rs = $stmt->fetch( PDO::FETCH_OBJ ) )
 		{
 			$arr[] = $rs;
 		}
 		return $arr;
+	}
+
+	// ------------------------------------------------------------------------
+
+	/**
+	 * Exec statement with error handling
+	 *
+	 * @author AvB
+	 **/
+	function exec($sql)
+	{
+		$dbh = $this->getdbh();
+
+		if( $dbh->exec($sql) === FALSE)
+		{
+			$err = $dbh->errorInfo();
+	        throw new Exception('database error: '.$err[2]);
+		}
 	}
 
 
@@ -181,11 +242,41 @@ class Model extends KISS_Model
 
 			// Set indexes
 			$this->set_indexes();
-			
+
+			// Store schema version in migration table
+			$migration = new Migration($this->tablename);
+			$migration->version = $this->schema_version;
+			$migration->save();
+			        }
+        else // Existing table, is it up-to date?
+        {
+        	if (conf('allow_migrations'))
+        	{
+        		if ($this->get_schema_version() !== $this->schema_version)
+        		{
+        			try
+        			{
+        				require_once(conf('application_path').'helpers/database_helper.php');
+
+	        			migrate($this);
+
+	        			$model_name = get_class($this);
+	        			alert('Migrated '.$model_name.' to version '.$this->schema_version);
+        			}
+        			catch(Exception $e)
+        			{
+        				error("Migration error: ".$e->getMessage());
+
+        				// Rollback any open transaction
+        				try { $dbh->rollBack(); } catch (Exception $e2) {}
+        			}
+        			
+        		}
+        	}
         }
 
         // Store this table in the instantiated tables array
-        $GLOBALS['tables'][$this->tablename] = TRUE;
+        $GLOBALS['tables'][$this->tablename] = $this->tablename;
 
 		//print_r($dbh->errorInfo());
         return ($dbh->errorCode() == '00000');
@@ -207,10 +298,35 @@ class Model extends KISS_Model
 		{
 			// Create name
 			$idx_name = $this->tablename . '_' . join('_', $idx_data);
-			$dbh->exec(sprintf("CREATE INDEX '%s' ON %s (%s)", $idx_name, $this->enquote($this->tablename), join(',', $idx_data)));
+			$this->exec(sprintf("CREATE INDEX '%s' ON %s (%s)", $idx_name, $this->enquote($this->tablename), join(',', $idx_data)));
 		}
 		
 		return ($dbh->errorCode() == '00000');
+	}
+
+	/**
+	 * Get schema version in the database
+	 *
+	 * @return void
+	 * @author 
+	 **/
+	function get_schema_version()
+	{
+		// Get schema versions
+		if( ! isset($GLOBALS['schema_versions']))
+		{
+			// Store schema versions in global, other models may need it too
+			$GLOBALS['schema_versions'] = array();
+
+			$migration = new Migration;
+			foreach( $migration->query('SELECT table_name, version FROM migration') AS $obj)
+			{
+				$GLOBALS['schema_versions'][$obj->table_name] = $obj->version;
+			}
+		}
+
+		return array_key_exists($this->tablename, $GLOBALS['schema_versions']) ?
+			intval($GLOBALS['schema_versions'][$this->tablename]) : 0;
 	}
 }
 
@@ -220,4 +336,46 @@ class Model extends KISS_Model
 class View extends KISS_View
 {
 	
+}
+
+/**
+ * Module controller class
+ *
+ * @package munkireport
+ * @author AvB
+ **/
+class Module_controller
+{
+	
+	// Module, override in child object
+	protected $module_path;
+
+	function get_script($name='')
+	{
+		// Check if script dir exists
+		if( is_readable($this->module_path . '/scripts/'))
+		{
+			// Get scriptnames in module scripts dir (just to be safe)
+			$scripts = array_diff(scandir($this->module_path . '/scripts/'), array('..', '.'));
+		}
+		else
+		{
+			$scripts = array();
+		}
+		
+		$script_path = $this->module_path . '/scripts/' . basename($name);
+
+		if( ! in_array($name, $scripts) OR ! is_readable($script_path))
+		{
+			// Signal to curl that the load failed
+			header("HTTP/1.0 404 Not Found");
+			printf('Script %s is not available', $name);
+			return;
+		}
+
+		// Dump the file
+		header("Content-Type: text/plain");
+		echo file_get_contents($script_path);
+	}
+
 }

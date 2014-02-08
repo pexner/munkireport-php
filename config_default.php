@@ -43,11 +43,10 @@
 	|
 	| The hostname of the webserver, default automatically
 	| determined. no trailing slash
-	| Syntax below with protocol relative url
-	| http://paulirish.com/2010/the-protocol-relative-url/
 	| 
 	*/
-	$conf['webhost'] = '//'.$_SERVER[ 'HTTP_HOST' ];
+	$conf['webhost'] = (empty($_SERVER['HTTPS']) ? 'http' : 'https')
+		. '://'.$_SERVER[ 'HTTP_HOST' ];
 	
 	
 	/*
@@ -81,6 +80,68 @@
 	|
 	*/
 	$conf['sitename'] = 'MunkiReport';
+	
+	/*
+	|===============================================
+	| Authentication
+	|===============================================
+	| 
+	| Currently four authentication methods are supported:
+	|
+	|	1) Don't require any authentication: paste the following line in your config.php
+	|			$conf['auth']['auth_noauth'] = array();
+	|
+	|	2) (default) Local accounts: visit /index.php?/auth/generate and paste
+	|	   the result in your config.php
+	|
+	|	3) LDAP:
+	|		At least fill in these items:
+	|		$conf['auth']['auth_ldap']['server']      = 'ldap.server.local'; // One or more servers separated by commas.
+	|		$conf['auth']['auth_ldap']['usertree']    = 'uid=%{user},cn=users,dc=server,dc=local'; // Where to find the user accounts.
+	|		$conf['auth']['auth_ldap']['grouptree']   = 'cn=groups,dc=server,dc=local'; // Where to find the groups.
+	|		$conf['auth']['auth_ldap']['mr_allowed_users'] = array('user1','user2'); // For user based access, fill in users.
+	|		$conf['auth']['auth_ldap']['mr_allowed_groups'] = array('group1','group2'); // For group based access, fill in groups.
+	|
+	|		Optional items:
+	|		$default_conf['userfilter']  = '(&(uid=%{user})(objectClass=posixAccount))'; // LDAP filter to search for user accounts.
+    |		$default_conf['groupfilter'] = '(&(objectClass=posixGroup)(memberUID=%{uid}))'; // LDAP filter to search for groups.
+	|		$conf['auth']['auth_ldap']['port']        = 389; // LDAP port.
+	|		$conf['auth']['auth_ldap']['version']     = 3; // Use LDAP version 1, 2 or 3.
+	|		$conf['auth']['auth_ldap']['starttls']    = FALSE; // Set to TRUE to use TLS.
+	|		$conf['auth']['auth_ldap']['referrals']   = FALSE; // Set to TRUE to follow referrals.
+	|		$conf['auth']['auth_ldap']['deref']       = LDAP_DEREF_NEVER; // How to dereference aliases. See http://php.net/ldap_search
+	|		$conf['auth']['auth_ldap']['binddn']      = ''; // Optional bind DN 
+	|		$conf['auth']['auth_ldap']['bindpw']      = ''; // Optional bind password
+	|		$conf['auth']['auth_ldap']['userscope']   = 'sub'; // Limit search scope to sub, one or base.
+	|		$conf['auth']['auth_ldap']['groupscope']  = 'sub'; // Limit search scope to sub, one or base.
+	|		$conf['auth']['auth_ldap']['groupkey']    = 'cn'; // The key that is used to determine group membership
+	|		$conf['auth']['auth_ldap']['debug']       = 0; // Set to TRUE to debug LDAP.
+	|
+	|	4) Active Directory: fill the needed and include the lines in your config.php.
+	|		 e.g.
+	|		$conf['auth']['auth_AD']['account_suffix'] = '@mydomain.local';
+	|		$conf['auth']['auth_AD']['base_dn'] = 'DC=mydomain,DC=local'; //set to NULL to auto-detect
+	|		$conf['auth']['auth_AD']['domain_controllers'] = array('dc01.mydomain.local'); //can be an array of servers
+	|		$conf['auth']['auth_AD']['admin_username'] = NULL; //if needed to perform the search
+	|		$conf['auth']['auth_AD']['admin_password'] = NULL; //if needed to perform the search
+	|		$conf['auth']['auth_AD']['mr_allowed_users'] = array('macadmin','bossman');
+	|		$conf['auth']['auth_AD']['mr_allowed_groups'] = array('AD Group 1','AD Group 2'); //case sensitive
+	|
+	| Authentication methods are checked in the order that they appear above. Not in the order of your
+	| config.php!. You can combine methods 2, 3 and 4
+	|
+	*/
+
+	/*
+	|===============================================
+	| Force secure connection when authorizing
+	|===============================================
+	| 
+	| Set this value to TRUE to force https when logging in.
+	| This is useful for sites that serve MR both via http and https
+	|
+	*/
+	$conf['auth_secure'] = FALSE;
 
 	/*
 	|===============================================
@@ -106,16 +167,18 @@
 
 	/*
 	|===============================================
-	| VNC link, optional link in the client detail view
+	| VNC and SSH links, optional links in the client detail view
 	|===============================================
 	| 
-	| If you want to have a link that opens a screensharing connection
-	| to a client, enable this setting. If you don't want the link
-	| set it to an empty string: $conf['vnc_link'] = "";
+	| If you want to have link that opens a screensharing or SSH
+	| connection to a client, enable these settings. If you don't
+	| want the links, set either to an empty string, eg:
+	| $conf['vnc_link'] = "";
 	|
 	*/
 	$conf['vnc_link'] = "vnc://%s:5900";
-	
+	$conf['ssh_link'] = "ssh://adminuser@%s";
+
 	/*
 	|===============================================
 	| Inventory - bundle ignore list
@@ -169,7 +232,73 @@
 	| 
 	| If you don't set this item, all available modules are installed (default)
 	*/
-    //$conf['modules'];
+    //$conf['modules'] = array();
+
+    /*
+	|===============================================
+	| Migrations
+	|===============================================
+	| 
+	| When a new version of munkireport comes out
+	| it might need to update your database structure
+	| if you want to allow this, set 
+	| $conf['allow_migrations'] = TRUE;
+	|
+	| There is a small overhead (one database query) when setting allow_migrations
+	| to TRUE. If you are concerned about performance, you can set allow_migrations
+	| to FALSE when you're done migrating.
+	|
+	*/
+    $conf['allow_migrations'] = FALSE;
+
+
+	/*
+	|===============================================
+	| Client passphrases
+	|===============================================
+	| 
+	| List of passphrases that the client can use to authenticate
+	| 
+	| On the client:
+	| defaults write /Library/Preferences/MunkiReport Passphrase 'secret1'
+	|
+	| On the server:
+	| $conf['client_passphrases'] = array('secret1', 'secret2');
+	| 
+	| 
+	*/
+    $conf['client_passphrases'] = array();
+
+	/*
+	|===============================================
+	| Proxy settings
+	|===============================================
+	| 
+	| If you are behind a proxy, MunkiReport may be unable to 
+	| retrieve warranty and model information from Apple.
+	|
+	| Note that there is only authenticated proxy support for
+	| basic authentication
+	| 
+	| $conf['proxy']['server'] = 'proxy.yoursite.org'; // Required
+	| $conf['proxy']['username'] = 'proxyuser'; // Optional
+	| $conf['proxy']['password'] = 'proxypassword'; Optional
+	| $conf['proxy']['port'] = 8080; // Optional, defaults to 8080
+	| 
+	*/
+    //$conf['proxy']['server'] = 'proxy.yoursite.org';
+
+    /*
+	|===============================================
+	| Request timeout
+	|===============================================
+	| 
+	| Timeout for retrieving warranty and model information from Apple.
+	|
+	| Timeout in seconds
+	| 
+	*/
+    $conf['request_timeout'] = 5;
 
 
  	/*
@@ -187,6 +316,21 @@
 	|
 	*/   
     $conf['ip_ranges'] = array();
+
+	/*
+	|===============================================
+	| Dashboard - Layout
+	|===============================================
+	| 
+	| Dashboard layout is an array of rows that contain
+	| an array of widgets. Omit the _widget postfix
+	|
+	*/
+    $conf['dashboard_layout'] = array(
+		array('client', 'munki', 'disk_report', 'installed_memory', 'bound_to_ds'),
+		array('new_clients', 'pending_apple', 'pending_munki'),
+		array('munki_versions', 'warranty', 'filevault')
+	);
 
 	/*
 	|===============================================

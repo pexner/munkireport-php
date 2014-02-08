@@ -1,21 +1,33 @@
-#!/bin/bash
+#!/usr/bin/python
 
-if [ "$1" = 'manualcheck' ]; then
-	echo 'Manual check: skipping'
-	exit 0
-fi
+import re
+import os
+import subprocess
+import sys
 
-DIR=$(dirname $0)
+# Replace integer with string
+# Round to .5GB precision (29 bit)
+def repl(m):
+    contents = int(m.group(1)) >> 29 << 29
+    return '<string>%d</string>' % contents 
 
-echo 'Collect disk info'
+# Skip manual check
+if len(sys.argv) > 1:
+	if sys.argv[1] == 'manualcheck':
+		print 'Manual check: skipping'
+		exit(0)
 
-mkdir -p "$DIR/cache"
+# Create cache dir if it does not exist
+cachedir = '%s/cache' % os.path.dirname(os.path.realpath(__file__))
+if not os.path.exists(cachedir):
+    os.makedirs(cachedir)
 
-# Get system disk (the one that ends with space-slash)
-SYSTEM=$(df -lk | sed -n 's#^\(/dev/disk[0-9a-z]*\).* /$#\1#p')
+# Get output from diskutil
+p = subprocess.Popen(["/usr/sbin/diskutil", "info", "-plist", "/"], stdout=subprocess.PIPE)
+out, err = p.communicate()
 
-echo "Selected system disk: ${SYSTEM}"
+# Convert and write to disk
+fo = open("%s/disk.plist" % cachedir, "w")
+fo.write(re.sub('<integer>(\d+)</integer>', repl, out))
+fo.close()
 
-# Get info with diskutil
-# Convert integer to string due to limitations of integer size in php
-diskutil info -plist $SYSTEM | sed 's/integer>/string>/g' > "$DIR/cache/disk.plist"

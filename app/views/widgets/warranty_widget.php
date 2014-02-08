@@ -1,4 +1,4 @@
-		<div class="col-lg-4">
+		<div class="col-lg-4 col-md-6">
 
 			<div class="panel panel-default">
 
@@ -10,7 +10,7 @@
 
 				<div class="list-group">
 
-				<?	$warranty = new Warranty(); 
+				<?	$warranty = new Warranty_model(); 
 					$thirtydays = date('Y-m-d', strtotime('+30days'));
 					$class_list = array('Supported' => 'warning');
 					$cnt = 0;

@@ -10,10 +10,11 @@ class Warranty_controller extends Module_controller
 {
 	function __construct()
 	{
-		if( ! isset($_SESSION['user']))
-		{
-			die('Authenticate first.'); // Todo: return json?
-		}
+		// No authentication, the client needs to get here
+
+		// Store module path
+		$this->module_path = dirname(__FILE__);
+
 	}
 
 	function index()
@@ -29,7 +30,13 @@ class Warranty_controller extends Module_controller
 	 **/
 	function recheck_warranty($serial='')
 	{
-		$warranty = new Warranty($serial);
+		// Authenticate
+		if( ! isset($_SESSION['user']))
+		{
+			die('Authenticate first.'); // Todo: return json?
+		}
+
+		$warranty = new Warranty_model($serial);
 		$warranty->check_status($force=TRUE);
 		redirect("clients/detail/$serial");
 	}
@@ -41,8 +48,14 @@ class Warranty_controller extends Module_controller
 	 **/
 	function age()
 	{
+		// Authenticate
+		if( ! isset($_SESSION['user']))
+		{
+			die('Authenticate first.'); // Todo: return json?
+		}
+
 		$out = array();
-		$warranty = new Warranty();
+		$warranty = new Warranty_model();
 
 		// Time calculations differ between sql implementations
 		switch($warranty->get_driver())

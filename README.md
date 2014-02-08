@@ -55,7 +55,11 @@ http://groups.google.com/group/munkireport-dev
 Contributing
 ---
 
-If you want to contribute to munkireport2, please fork the repository, create a feature branch and send a pull request with your changes.
+If you want to contribute to munkireport2, please 
+
+* fork the [wip branch of repository](https://github.com/munkireport/munkireport-php/tree/wip)
+* create a feature branch
+* send a pull request with your changes.
 
 
 External projects
@@ -73,4 +77,5 @@ Munkireport-php makes use of these fine software packages:
 * [Moment.js](http://momentjs.com) for displaying time
 * [Bootstrap 3.0](http://getbootstrap.com) the main webframework
 * [Font Awesome](http://fortawesome.github.io/Font-Awesome/) for icons
+* [adLDAP](http://adldap.sourceforge.net) for authenticating against AD
 
