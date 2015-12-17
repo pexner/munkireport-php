@@ -422,7 +422,7 @@
 	|	smart_status
 	|	disk_report
 	|	uptime
-	|	installed memory
+	|	installed_memory
 	|	munki
 	|	power_battery_condition
 	|	power_battery_health
